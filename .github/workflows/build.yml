@@ -4175,9 +4175,9 @@ jobs:
                 LTO_FLAG="--lto=none"
               fi
               echo "=======================abi_gki_aarch64_xiaomi======================"
-              echo ./common/android/abi_gki_aarch64_xiaomi
+              cat ./common/android/abi_gki_aarch64_xiaomi
               echo "=======================build.config.gki.aarch64===================="
-              echo ./common/build.config.gki.aarch64
+              cat ./common/build.config.gki.aarch64
               tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
               strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
             fi
