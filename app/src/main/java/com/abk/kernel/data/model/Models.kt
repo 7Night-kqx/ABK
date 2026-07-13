@@ -208,6 +208,7 @@ data class GitHubRelease(
     @SerializedName("published_at") val publishedAt: String? = null,
     val body: String? = null,
     @SerializedName("assets_url") val assetsUrl: String? = null,
+    @SerializedName("upload_url") val uploadUrl: String? = null,
     val assets: List<ReleaseAsset> = emptyList()
 )
 
@@ -350,6 +351,37 @@ data class AccessTokenResponse(
     @SerializedName("error_description") val errorDescription: String?
 )
 
+data class GitHubSecretPublicKey(
+    @SerializedName("key_id") val keyId: String,
+    @SerializedName("key") val key: String
+)
+
+data class GitHubRepositorySecret(
+    val name: String,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null
+)
+
+data class GitHubRepositorySecretsResponse(
+    @SerializedName("total_count") val totalCount: Int,
+    @SerializedName("secrets") val secrets: List<GitHubRepositorySecret> = emptyList()
+)
+
+data class CreateOrUpdateRepositorySecretRequest(
+    @SerializedName("encrypted_value") val encryptedValue: String,
+    @SerializedName("key_id") val keyId: String
+)
+
+data class CreateReleaseRequest(
+    @SerializedName("tag_name") val tagName: String,
+    @SerializedName("target_commitish") val targetCommitish: String? = null,
+    val name: String? = null,
+    val body: String? = null,
+    val draft: Boolean = false,
+    val prerelease: Boolean = true,
+    @SerializedName("generate_release_notes") val generateReleaseNotes: Boolean = false
+)
+
 data class Workflow(
     val id: Long,
     val name: String,
@@ -376,6 +408,32 @@ object CustomExternalModuleStage {
         else -> AFTER_PATCH
     }
 }
+
+object CustomKernelOptionMode {
+    const val ENABLED_Y = "enabled_y"
+    const val ENABLED_M = "enabled_m"
+    const val DISABLED = "disabled"
+    const val IGNORE = "ignore"
+    const val RAW = "raw"
+
+    val options = listOf(ENABLED_Y, ENABLED_M, DISABLED, IGNORE, RAW)
+
+    fun normalize(value: String?): String = when (value?.trim()?.lowercase()) {
+        ENABLED_Y, "y", "yes", "on", "enable", "enabled" -> ENABLED_Y
+        ENABLED_M, "m", "module", "mod" -> ENABLED_M
+        DISABLED, "n", "no", "off", "disable", "disabled", "not_set", "not-set" -> DISABLED
+        IGNORE, "skip", "unchanged", "keep" -> IGNORE
+        RAW, "value", "raw_value", "raw-value" -> RAW
+        else -> IGNORE
+    }
+}
+
+data class CustomKernelOption(
+    val symbol: String = "",
+    val mode: String = CustomKernelOptionMode.IGNORE,
+    val rawValue: String = "",
+    val source: String = ""
+)
 
 data class CustomExternalModule(
     val url: String = "",
@@ -565,6 +623,7 @@ data class KernelBuildConfig(
     val zramExtraAlgos: String = "",
     val kpmPassword: String = "",
     val virtualizationSupport: String = "off",
+    val customKernelOptions: List<CustomKernelOption> = emptyList(),
     val useCustomExternalModules: Boolean = false,
     val customExternalModules: List<CustomExternalModule> = emptyList(),
     val onePlusCpu: String = "sm8650",
@@ -583,7 +642,8 @@ data class AbkRuntimeStatus(
     val manager: AbkRuntimeManagerInfo? = null,
     @SerializedName("runtime_backend") val runtimeBackend: AbkRuntimeManagerInfo? = null,
     val build: AbkRuntimeBuildInfo? = null,
-    val modules: List<AbkRuntimeModule> = emptyList()
+    val modules: List<AbkRuntimeModule> = emptyList(),
+    @SerializedName("extension_modules") val extensionModules: List<AbkRuntimeModule> = emptyList()
 )
 
 data class AbkRuntimeManagerInfo(
@@ -621,7 +681,14 @@ data class AbkRuntimeModule(
     val description: String = "",
     @SerializedName("repo_url") val repoUrl: String = "",
     val stage: String = "",
+    @SerializedName("entry_kind") val entryKind: String = "",
     val source: String = "",
+    @SerializedName("extension_id") val extensionId: String = "",
+    @SerializedName("companion_package") val companionPackage: String = "",
+    @SerializedName("companion_display_name") val companionDisplayName: String = "",
+    @SerializedName("companion_asset_name") val companionAssetName: String = "",
+    @SerializedName("companion_download_url") val companionDownloadUrl: String = "",
+    @SerializedName("service_activity") val serviceActivity: String = "",
     @SerializedName("module_dir") val moduleDir: String = "",
     @SerializedName("web_root") val webRoot: String = "",
     val readonly: Boolean = false,
@@ -632,6 +699,10 @@ data class AbkRuntimeModule(
     @SerializedName("has_web_ui") val hasWebUi: Boolean = false,
     @SerializedName("has_action_script") val hasActionScript: Boolean = false,
     @SerializedName("action_supported") val actionSupported: Boolean = false,
+    @SerializedName("requires_companion_app") val requiresCompanionApp: Boolean = false,
+    @SerializedName("settings_supported") val settingsSupported: Boolean = false,
+    @SerializedName("per_app_supported") val perAppSupported: Boolean = false,
+    @SerializedName("oobe_priority") val oobePriority: Int = 0,
     @SerializedName("kpm_args") val kpmArgs: String = "",
     @SerializedName("group_id") val groupId: String = "",
     @SerializedName("group_name") val groupName: String = "",
@@ -675,8 +746,11 @@ data class RootGrantApp(
     val uid: Int = 0,
     val userName: String = "",
     val isSystemApp: Boolean = false,
-    val profile: RootGrantProfile = RootGrantProfile()
+    val profile: RootGrantProfile = RootGrantProfile(),
+    val profileLoaded: Boolean = false
 )
+
+const val ROOT_PROFILE_FLAG_NO_NEW_PRIVS: Long = 1L
 
 data class RootGrantProfile(
     val name: String = "",
@@ -690,9 +764,21 @@ data class RootGrantProfile(
     val capabilities: List<Int> = emptyList(),
     val context: String = "u:r:ksu:s0",
     val namespace: Int = 0,
+    val flags: Long = ROOT_PROFILE_FLAG_NO_NEW_PRIVS,
     val nonRootUseDefault: Boolean = true,
     val umountModules: Boolean = true,
     val rules: String = ""
+)
+
+data class RootGrantProfileRecoveryRecord(
+    val packageName: String = "",
+    val uid: Int = 0,
+    val label: String = ""
+)
+
+data class RootGrantRecoveryNotice(
+    val title: String = "",
+    val message: String = ""
 )
 
 data class BuildPlan(
@@ -747,6 +833,8 @@ data class DownloadedArtifact(
     val runNumber: Int = 0,
     val sourceAssetId: Long = 0L,
     val sourceAssetName: String? = null,
+    val verified: Boolean = false,
+    val verificationSummary: String? = null,
     val category: ArtifactCategory = type.toArtifactCategory()
 )
 
